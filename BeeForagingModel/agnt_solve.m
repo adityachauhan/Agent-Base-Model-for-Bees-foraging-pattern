@@ -1,0 +1,85 @@
+function [nagent]=agnt_solve(agent)
+% Function that updates each agent
+
+global IT_STATS ENV_DATA MESSAGES N_IT
+
+n=length(agent);    % Current no. of agents
+rng('shuffle')% To avoid repeating random numbers
+% Execute existing agent update loop
+for cn=1:n
+	curr=agent{cn}; % Store agent from agent list in temporary variable
+    if(curr.pos(2)>=ENV_DATA.sourceApos(1,1))&&(curr.pos(2)<=ENV_DATA.sourceApos(1,2))
+        IT_STATS.atSourceA(N_IT)=IT_STATS.atSourceA(N_IT)+1; % Increase counter for bees at source A
+        % If the bee is currently in source A, try to eat
+        [curr,eaten]=eat(curr);
+        if eaten==0
+            curr=migrate(curr,curr.knownSource); % If no food was eaten, then migrate in search of food
+        elseif eaten==1
+            curr= migrate_back(curr); % If food was found, migrate back to hive
+        end
+    elseif(curr.pos(2)>=ENV_DATA.sourceBpos(1,1))&&(curr.pos(2)<=ENV_DATA.sourceBpos(1,2))
+        IT_STATS.atSourceB(N_IT)=IT_STATS.atSourceB(N_IT)+1; % Increase counter for bees at source A
+        % If the bee is currently in source B, try to eat
+        [curr,eaten]=eat(curr);
+        if eaten==0
+            curr=migrate(curr,curr.knownSource); % if no food was eaten, then migrate in search of food
+        elseif eaten==1
+            curr= migrate_back(curr); % If food was found, migrate back to hive
+        end
+    elseif(curr.pos(2)>=ENV_DATA.hivePos(1,1))&&(curr.pos(2)<=ENV_DATA.hivePos(1,2)...
+            &&(curr.pos(1)>=ENV_DATA.hivePos(2,1))&&(curr.pos(1)<=ENV_DATA.hivePos(2,2)))
+        IT_STATS.atHive(N_IT)=IT_STATS.atHive(N_IT)+1; % Increase counter for bees at hive
+        % If the bee is currently in the hive
+        if(~isempty(curr.knownSource))
+            % If the bee knows a source, either do waggle dance or go to
+            % source
+            if(isequal(curr.knownSource,ENV_DATA.sourceApos))
+                % The profitability of the source is dependent on it
+                % relative amount of food, and the distance to it
+                profit=(IT_STATS.Afood(N_IT)/(IT_STATS.tfood(N_IT)*ENV_DATA.distanceA))*ENV_DATA.bm_size;
+                if(profit>randi([0 5]))&&(IT_STATS.recruits(N_IT)>0)
+                    % Do waggle dance
+                    do_waggleDance(curr,n,profit);
+                    % Increase counter for number of bees doing waggle
+                    % dance for source A
+                    IT_STATS.waggleDanceA(N_IT)=IT_STATS.waggleDanceA(N_IT)+1;
+                else
+                    curr=goto_source(curr); % Go to known source
+                end
+            elseif(isequal(curr.knownSource,ENV_DATA.sourceBpos))
+                % The profitability of the source is dependent on it
+                % relative amount of food, and the distance to it
+                profit=(IT_STATS.Bfood(N_IT)/(IT_STATS.tfood(N_IT)*ENV_DATA.distanceB))*ENV_DATA.bm_size;
+                if(profit>randi([0 5]))&&(IT_STATS.recruits(N_IT)>0)
+                    % Do waggle dance
+                    do_waggleDance(curr,n,profit);
+                    % Increase counter for number of bees doing waggle
+                    % dance for source B
+                    IT_STATS.waggleDanceB(N_IT)=IT_STATS.waggleDanceB(N_IT)+1;
+                 else
+                    curr=goto_source(curr);% Go to known source
+                end
+            end
+        elseif(MESSAGES.wSourceXmin(cn)~=0)&&(MESSAGES.wSourceXmax(cn)~=0)&&...
+                (MESSAGES.wSourceYmin(cn)~=0)&&(MESSAGES.wSourceYmax(cn)~=0)
+            % If thee bee hears a waggle dance,store the location of the
+            % source
+            curr.knownSource=[MESSAGES.wSourceYmin(cn) MESSAGES.wSourceYmax(cn);...
+                        MESSAGES.wSourceXmin(cn) MESSAGES.wSourceXmax(cn)];
+            curr=goto_source(curr); % Go to known source
+        end
+    else
+        % If the agent is neither at the hive or a source, it shoudl return
+        % to the hive.
+        curr= migrate_back(curr); 
+    end
+    % Clear any messages about location of source 
+    MESSAGES.wSourceXmin(cn)=0;
+    MESSAGES.wSourceXmax(cn)=0;
+    MESSAGES.wSourceYmin(cn)=0;
+    MESSAGES.wSourceYmax(cn)=0;
+   agent{cn}=curr; % Update cell array with modified agent data structure
+
+end
+
+[nagent]=update_messages(agent,n); % Update messages with new info
